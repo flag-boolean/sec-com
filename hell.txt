@@ -1,0 +1,128 @@
+80, 8443
+
+Office Ideco
+Файрвол - DNAT
+Источник - белый из задания
+Назначение - внешний Ideco Office
+Назначение порт - из задания (22, 8443)
+заменить IP на - IP системы
+заменить порт на - порт из задания (22, 80)
+
+
+
+Vipnet Client Linux
+Vipnet NAT
+
+
+SNS Vipnet Administrator
+съемные накопители
+
+
+KSMG - IP KSMG на клиентах Thunderbird
+
+
+KESL - шары и ИС
+
+
+KUMA - syslog FS; KSC; syslog SED, сайт; KSMG (дока)
+
+
+SMB: для ввода в домен редос - https://dzen.ru/b/ZPif9x1pzxKuywpB
+sudo systemctl revert systemd-resolved.service
+sudo nano /etc/systemd/resolved.conf
+[Resolve]
+DNSStubListener=yes
+sudo rm -f /etc/resolv.conf
+sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+ls -l /etc/resolv.conf
+# Должно быть: ../run/systemd/resolve/stub-resolv.conf
+sudo systemctl daemon-reload
+sudo systemctl stop systemd-resolved
+sudo systemctl reset-failed systemd-resolved  # Сбрасывает failed-флаг
+sudo systemctl start systemd-resolved
+sudo systemctl status systemd-resolved
+
+
+SMB
+
+# 1. Проверка домена
+realm list
+# Должно показать: example.local, configured: kerberos-member
+
+# 2. Проверка, что группа ALD Pro резолвится через SSSD
+getent group <имя_группы_aldpro>
+# Пример: aldpro_file_users:*:1457400123:admin1,admin2
+
+# 3. Проверка Kerberos-билета
+klist -k /etc/krb5.keytab | grep $(hostname -s)
+
+sudo sss_cache -E
+
+
+[global]
+   # === Доменные параметры ===
+   workgroup = EXAMPLE
+   realm = EXAMPLE.LOCAL
+   security = user
+   kerberos method = secrets and keytab
+   dedicated keytab file = /etc/krb5.keytab
+
+   # === ID-маппинг через SSSD (обязательно для ALD Pro) ===
+   # Локальные пользователи/группы (не из домена)
+   idmap config * : backend = tdb
+   idmap config * : range = 2000-4999
+
+   # Доменные пользователи/группы из ALD Pro
+   idmap config EXAMPLE : backend = sss
+   idmap config EXAMPLE : range = 5000-999999
+
+   # === Оптимизация для больших доменов ===
+   winbind enum users = no
+   winbind enum groups = no
+   template homedir = /home/%U
+   template shell = /bin/bash
+
+   # === Логирование ===
+   log file = /var/log/samba/log.%m
+   max log size = 50
+   log level = 1
+
+   # === Поддержка расширенных прав ===
+   vfs objects = acl_xattr
+   map acl inherit = yes
+   store dos attributes = yes
+
+# ================= ШАРА ДЛЯ ГРУППЫ ALD PRO =================
+[aldpro_share]
+   comment = Shared folder for ALD Pro group
+   path = /srv/samba/aldpro_share
+   browseable = yes
+   read only = no
+   guest ok = no
+
+   # Доступ только для доменной группы (знак + = поиск через SSSD)
+   valid users = +aldpro_file_users
+   force group = +aldpro_file_users
+
+   # Права на создаваемые объекты
+   create mask = 0770
+   directory mask = 0770
+   inherit permissions = yes
+   inherit acls = yes
+
+[aldpro_share1]
+   comment = Shared folder for ALD Pro group
+   path = /srv/samba/aldpro_share1
+   browseable = yes
+   read only = no
+   guest ok = no
+
+   # Доступ только для доменной группы (знак + = поиск через SSSD)
+   valid users = +aldpro_file_users
+   force group = +aldpro_file_users
+
+   # Права на создаваемые объекты
+   create mask = 0770
+   directory mask = 0770
+   inherit permissions = yes
+   inherit acls = yes
